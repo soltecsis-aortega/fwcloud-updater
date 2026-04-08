@@ -24,7 +24,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UpdatesServiceConfig, Apps, Versions } from './updates.model';
 import { LogsService } from '../logs/logs.service';
-import * as cmp from 'semver-compare';
+import cmp from 'semver-compare';
 import * as fs from 'fs';
 import * as child from 'child-process-promise';
 import axios from 'axios';
@@ -39,13 +39,13 @@ export class UpdatesService {
     private configService: ConfigService,
     private logsService: LogsService,
   ) {
-    this._cfg = this.configService.get('updates');
+    this._cfg = this.configService.get<UpdatesServiceConfig>('updates')!;
     this.log = logsService;
   }
 
   async compareVersions(app: Apps): Promise<Versions | null> {
-    let localJson: { version?: string } = {};
-    let remoteJson: { data?: { version?: string } } = {};
+    let localJson: { version?: string } | undefined;
+    let remoteJson: { data?: { version?: string } } | undefined;
 
     const localPath = `${this._cfg[app].installDir}/package.json`;
     try {
@@ -82,12 +82,7 @@ export class UpdatesService {
       current: localJson.version,
       last: remoteJson.data.version,
       needsUpdate:
-        (cmp as (a: string, b: string) => number)(
-          remoteJson.data.version,
-          localJson.version,
-        ) === 1
-          ? true
-          : false,
+        cmp(remoteJson.data.version, localJson.version) === 1 ? true : false,
     };
 
     return versions;
@@ -134,7 +129,6 @@ export class UpdatesService {
     if (app === Apps.UI) {
       try {
         this.log.info(`Updating fwcloud-${app} ...`);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         await child.spawn('npm', ['run', 'update'], {
           cwd: this._cfg[app].installDir,
         });
@@ -173,23 +167,16 @@ export class UpdatesService {
   private async updateAppInBackground(app: Apps): Promise<void> {
     try {
       this.log.info(`Updating fwcloud-${app} ...`);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       await child.spawn('npm', ['run', 'update'], {
         cwd: this._cfg[app].installDir,
       });
       this.log.info(`fwcloud-${app} update finished. Starting it ...`);
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
-      const promise: child.ChildProcessPromise = child.spawn(
-        'npm',
-        ['run', 'start:bg'],
-        {
-          cwd: this._cfg[app].installDir,
-          detached: true,
-          stdio: 'ignore',
-        },
-      );
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      const promise = child.spawn('npm', ['run', 'start:bg'], {
+        cwd: this._cfg[app].installDir,
+        detached: true,
+        stdio: 'ignore',
+      });
       promise.childProcess.unref();
       await promise;
     } catch (err: any) {
