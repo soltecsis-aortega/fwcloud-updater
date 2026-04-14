@@ -24,20 +24,22 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { LogsService } from './logs/logs.service';
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 import * as fs from 'fs';
 
 async function bootstrap() {
   let app = await NestFactory.create(AppModule);
   let config: ConfigService = app.get<ConfigService>(ConfigService);
+  const httpsEnabled = config.get<boolean>('updater.https')!;
 
-  if (config.get('updater.https')) {
+  if (httpsEnabled) {
+    const keyPath = config.get<string>('updater.key')!;
+    const certPath = config.get<string>('updater.cert')!;
+    const caBundlePath = config.get<string>('updater.ca_bundle')!;
     const httpsOptions = {
-      key: fs.readFileSync(config.get('updater.key')).toString(),
-      cert: fs.readFileSync(config.get('updater.cert')).toString(),
-      ca: config.get('updater.ca_bundle')
-        ? fs.readFileSync(config.get('updater.ca_bundle')).toString()
-        : null,
+      key: fs.readFileSync(keyPath).toString(),
+      cert: fs.readFileSync(certPath).toString(),
+      ca: caBundlePath ? fs.readFileSync(caBundlePath).toString() : null,
     };
     void app.close();
     app = await NestFactory.create(AppModule, { httpsOptions: httpsOptions });
@@ -45,8 +47,8 @@ async function bootstrap() {
   }
 
   const log: LogsService = app.get<LogsService>(LogsService);
-  const host: string = config.get('updater.host');
-  const port: number = config.get('updater.port');
+  const host = config.get<string>('updater.host')!;
+  const port = config.get<number | string>('updater.port')!;
 
   app.use(cookieParser());
 
@@ -56,9 +58,7 @@ async function bootstrap() {
   );
 
   await app.listen(port, host);
-  log.info(
-    `Listening on http${config.get('updater.host') ? 's' : ''}://${host}:${port}`,
-  );
+  log.info(`Listening on http${httpsEnabled ? 's' : ''}://${host}:${port}`);
 
   // If the service is started successfully then store the PID in the file.
   fs.writeFileSync('.pid', `${process.pid}`);

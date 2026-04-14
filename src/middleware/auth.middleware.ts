@@ -45,7 +45,7 @@ export class AuthMiddleware implements NestMiddleware {
     private configService: ConfigService,
     private log: LogsService,
   ) {
-    this._cfg = this.configService.get('updates');
+    this._cfg = this.configService.get<UpdatesServiceConfig>('updates')!;
   }
 
   use(req: RequestWithCookies, res: Response, next: functionNext): void {

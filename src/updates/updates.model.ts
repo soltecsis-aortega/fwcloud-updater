@@ -40,10 +40,10 @@ export type UpdatesServiceConfig = {
 };
 
 export interface UpdatesInfo {
-  websrv: Versions;
-  ui: Versions;
-  api: Versions;
-  updater: Versions;
+  websrv: Versions | null;
+  ui: Versions | null;
+  api: Versions | null;
+  updater: Versions | null;
 }
 
 export interface Versions {

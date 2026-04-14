@@ -28,13 +28,27 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as child from 'child-process-promise';
 
+jest.mock('child-process-promise', () => ({
+  spawn: jest.fn(),
+}));
+
 describe('UpdatesService', () => {
   let service: UpdatesService;
   let cfg: UpdatesServiceConfig;
+  let axiosGetSpy: jest.SpiedFunction<typeof axios.get>;
+  let childSpawnMock: jest.Mock;
 
   const mockLogsService: { info: jest.Mock; error: jest.Mock } = {
     info: jest.fn(),
     error: jest.fn(),
+  };
+
+  const createSpawnResult = () => {
+    const promise = Promise.resolve({}) as Promise<unknown> & {
+      childProcess: { unref: jest.Mock };
+    };
+    promise.childProcess = { unref: jest.fn() };
+    return promise;
   };
 
   beforeEach(async () => {
@@ -71,14 +85,18 @@ describe('UpdatesService', () => {
     }).compile();
 
     service = module.get<UpdatesService>(UpdatesService);
-    cfg = module.get<ConfigService>(ConfigService).get('updates');
+    cfg = module
+      .get<ConfigService>(ConfigService)
+      .get<UpdatesServiceConfig>('updates')!;
 
-    axios.get = jest.fn().mockResolvedValue({});
-    child.spawn = jest.fn().mockResolvedValue({});
+    axiosGetSpy = jest.spyOn(axios, 'get').mockResolvedValue({});
+    childSpawnMock = child.spawn as jest.Mock;
+    childSpawnMock.mockImplementation(() => createSpawnResult());
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('should be defined', () => {
@@ -119,7 +137,7 @@ describe('UpdatesService', () => {
     });
 
     it('should update', async () => {
-      axios.get = jest.fn().mockResolvedValue({ data: { version: '1.1.1' } });
+      axiosGetSpy.mockResolvedValue({ data: { version: '1.1.1' } });
       expect(await service.compareVersions(Apps.WEBSRV)).toEqual({
         current: '1.0.7',
         last: '1.1.1',
@@ -128,7 +146,7 @@ describe('UpdatesService', () => {
     });
 
     it('should not update (same version)', async () => {
-      axios.get = jest.fn().mockResolvedValue({ data: { version: '1.0.7' } });
+      axiosGetSpy.mockResolvedValue({ data: { version: '1.0.7' } });
       expect(await service.compareVersions(Apps.WEBSRV)).toEqual({
         current: '1.0.7',
         last: '1.0.7',
@@ -137,7 +155,7 @@ describe('UpdatesService', () => {
     });
 
     it('should not update (last less than current)', async () => {
-      axios.get = jest.fn().mockResolvedValue({ data: { version: '1.0.0' } });
+      axiosGetSpy.mockResolvedValue({ data: { version: '1.0.0' } });
       expect(await service.compareVersions(Apps.WEBSRV)).toEqual({
         current: '1.0.7',
         last: '1.0.0',
@@ -159,8 +177,8 @@ describe('UpdatesService', () => {
 
     it('should launch fwcloud-ui update', async () => {
       await expect(service.runUpdate(Apps.UI)).resolves.toBeUndefined();
-      expect(child.spawn).toHaveBeenCalled();
-      expect(child.spawn.mock.calls[0]).toEqual([
+      expect(childSpawnMock).toHaveBeenCalled();
+      expect(childSpawnMock.mock.calls[0]).toEqual([
         'npm',
         ['run', 'update'],
         { cwd: cfg[Apps.UI].installDir },
@@ -171,13 +189,13 @@ describe('UpdatesService', () => {
       expect(service.runUpdate(Apps.WEBSRV));
       await new Promise((resolve) => {
         setTimeout(() => {
-          expect(child.spawn).toHaveBeenCalled();
-          expect(child.spawn.mock.calls[0]).toEqual([
+          expect(childSpawnMock).toHaveBeenCalled();
+          expect(childSpawnMock.mock.calls[0]).toEqual([
             'npm',
             ['run', 'update'],
             { cwd: cfg[Apps.WEBSRV].installDir },
           ]);
-          expect(child.spawn.mock.calls[1]).toEqual([
+          expect(childSpawnMock.mock.calls[1]).toEqual([
             'npm',
             ['run', 'start:bg'],
             {
@@ -195,13 +213,13 @@ describe('UpdatesService', () => {
       expect(service.runUpdate(Apps.API));
       await new Promise((resolve) => {
         setTimeout(() => {
-          expect(child.spawn).toHaveBeenCalled();
-          expect(child.spawn.mock.calls[0]).toEqual([
+          expect(childSpawnMock).toHaveBeenCalled();
+          expect(childSpawnMock.mock.calls[0]).toEqual([
             'npm',
             ['run', 'update'],
             { cwd: cfg[Apps.API].installDir },
           ]);
-          expect(child.spawn.mock.calls[1]).toEqual([
+          expect(childSpawnMock.mock.calls[1]).toEqual([
             'npm',
             ['run', 'start:bg'],
             { cwd: cfg[Apps.API].installDir, detached: true, stdio: 'ignore' },
